@@ -16,21 +16,21 @@ Each release includes:
 Install the latest stable release:
 
 ```sh
-curl -fsSL https://github.com/PolasekT/sandboxer-releases/releases/latest/download/install.sh |
+curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/main/install.sh |
   SANDBOXER_STREAM=release bash
 ```
 
 Install the latest development prerelease:
 
 ```sh
-curl -fsSL https://github.com/PolasekT/sandboxer-releases/releases/latest/download/install.sh |
+curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/main/install.sh |
   SANDBOXER_STREAM=dev bash
 ```
 
 Pin a specific tag:
 
 ```sh
-curl -fsSL https://github.com/PolasekT/sandboxer-releases/releases/latest/download/install.sh |
+curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/main/install.sh |
   SANDBOXER_VERSION=v0.1.0-dev.2 bash
 ```
 
