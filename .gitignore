@@ -1,0 +1,5 @@
+# Release assets are uploaded by the source workflow, not committed here.
+*.tar.gz
+*.tar.gz.sha256
+SHA256SUMS
+SHA256SUMS.sig
