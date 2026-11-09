@@ -16,21 +16,21 @@ Each release includes:
 Install the latest stable release:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/main/install.sh |
+curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
   SANDBOXER_STREAM=release bash
 ```
 
 Install the latest development prerelease:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/main/install.sh |
+curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
   SANDBOXER_STREAM=dev bash
 ```
 
 Pin a specific tag:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/main/install.sh |
+curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
   SANDBOXER_VERSION=v0.1.0-dev.2 bash
 ```
 
@@ -58,7 +58,7 @@ tag=v0.1.0-dev.3
 base="https://github.com/PolasekT/sandboxer-releases/releases/download/$tag"
 curl -fsSLO "$base/SHA256SUMS"
 curl -fsSLO "$base/SHA256SUMS.sig"
-curl -fsSLO "https://raw.githubusercontent.com/PolasekT/sandboxer-releases/main/release_allowed_signers"
+curl -fsSLO "https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/release_allowed_signers"
 ssh-keygen -Y verify \
   -f release_allowed_signers \
   -I sandboxer-release \
