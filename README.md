@@ -184,7 +184,16 @@ sandboxer upgrade
 sandboxer upgrade --version v0.1.0-dev.5
 ```
 
-`upgrade` defaults to this public release repository. Set
+To follow development prereleases:
+
+```sh
+sandboxer upgrade --check --stream dev
+sandboxer upgrade --stream dev
+```
+
+The installer records the selected stream and version; `upgrade` follows that
+stream by default, and an explicit `-dev.N` version selects the dev stream
+automatically. `upgrade` defaults to this public release repository. Set
 `SANDBOXER_RELEASE_REPO=owner/repository` to use a mirror.
 
 ## Verification
