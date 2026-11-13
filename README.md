@@ -31,11 +31,19 @@ Pin a specific tag:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
-  SANDBOXER_VERSION=v0.1.0-dev.2 bash
+  SANDBOXER_VERSION=v0.1.0-dev.5 bash
 ```
 
 The installer verifies `SHA256SUMS`, installs to `~/.local/bin` by default, and
 does not use `sudo` or edit shell rc files.
+
+## Release status
+
+Phase 20 is closed for the **policy-only** transparent-interception slice. The
+experimental `--transparent-intercept mitm-all` provider-injection mode is
+available behind an explicit opt-in, but it is **not finalized**: public-IPv6
+production traffic, controlled churn/concurrency, and hard-kill cleanup remain
+open. Do not treat provider POST APIs as fully supported yet.
 
 ## What do you need?
 
@@ -109,6 +117,40 @@ destinations remain unreachable.
 This mode currently covers HTTP(S) clients that honor proxy settings. Raw TCP,
 SSH, UDP, ICMP, and apps that ignore proxy variables are not covered.
 
+### “I need hostname-aware policy for tools that ignore proxy settings”
+
+**How sandboxer delivers:** opt-in transparent interception parses HTTP `Host`
+and TLS SNI inside the pasta namespace, applies the existing allow/deny policy,
+and blocks UDP 443 and non-DNS UDP.
+
+```sh
+sandboxer run --net transparent --transparent-intercept policy \
+  --allow example.com -- curl -fsS https://example.com/
+```
+
+**Expected:** allowed hosts connect through the interceptor; denied hosts fail
+closed. Raw `--net transparent` remains unchanged when interception is not
+selected.
+
+OpenCode’s default `all` network profile is broad. Use `--net-profile secure` or
+explicit `--service`/`--allow` rules when you want a narrower interception
+policy.
+
+### “I need injected provider credentials only for selected APIs”
+
+**How sandboxer delivers:** the experimental `mitm-all` mode terminates HTTPS
+with a per-run CA and injects configured provider headers only for explicitly
+selected provider hosts. Non-provider TLS passes through end-to-end.
+
+```sh
+sandboxer run --net transparent --transparent-intercept mitm-all \
+  --service <provider-service> -- curl -fsS https://<provider-host>/...
+```
+
+**Expected:** only the selected provider host receives the injected header;
+chunked request bodies fail closed. This mode remains experimental and
+intentionally unfinalized, and the app must trust the per-run CA.
+
 ### “I need to know what network decisions a run made”
 
 **How sandboxer delivers:** opt-in audit mode records network allowances, denials,
@@ -139,7 +181,7 @@ exposed unless requested.
 ```sh
 sandboxer upgrade --check
 sandboxer upgrade
-sandboxer upgrade --version v0.1.0-dev.2
+sandboxer upgrade --version v0.1.0-dev.5
 ```
 
 `upgrade` defaults to this public release repository. Set
@@ -151,7 +193,7 @@ Download the checksum files for a release and verify them against the published
 allowed-signers file:
 
 ```sh
-tag=v0.1.0-dev.3
+tag=v0.1.0-dev.5
 base="https://github.com/PolasekT/sandboxer-releases/releases/download/$tag"
 curl -fsSLO "$base/SHA256SUMS"
 curl -fsSLO "$base/SHA256SUMS.sig"
