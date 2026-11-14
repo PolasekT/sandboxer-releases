@@ -31,7 +31,7 @@ Pin a specific tag:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
-  SANDBOXER_VERSION=v0.1.0-dev.5 bash
+  SANDBOXER_VERSION=v0.1.0-dev.6 bash
 ```
 
 The installer verifies `SHA256SUMS`, installs to `~/.local/bin` by default, and
@@ -44,6 +44,11 @@ experimental `--transparent-intercept mitm-all` provider-injection mode is
 available behind an explicit opt-in, but it is **not finalized**: public-IPv6
 production traffic, controlled churn/concurrency, and hard-kill cleanup remain
 open. Do not treat provider POST APIs as fully supported yet.
+
+Phase 21 adds optional **rootless, audit-only filesystem auditing** in
+`v0.1.0-dev.6` and later. It records path/operation events, not file contents.
+It does not provide PID or reliable exec attribution; the optional privileged
+tier remains deferred.
 
 ## What do you need?
 
@@ -164,6 +169,26 @@ sandboxer session audit <run-id> --json
 **Expected:** the run ID has a JSONL audit trail with host, port, decision, and
 reason fields.
 
+### “I need to know which files an agent changed”
+
+**How sandboxer delivers:** opt-in rootless filesystem audit records workspace
+and selected-profile path/operation events without logging file contents or
+secrets. It works in rw, ro, ephemeral overlay, and persistent overlay modes.
+
+```sh
+sandboxer run --fs-audit --net none -- sh -c 'echo changed > notes.txt'
+sandboxer session fs-audit <run-id>
+sandboxer session fs-audit <run-id> --json
+```
+
+Add `--fs-audit-reads` to include open/read/access events. Events include
+create, write, attrib, rename, unlink, and explicit overflow/unavailable
+degradation markers. Overlay events report the guest workspace path.
+
+**Expected:** the run produces `runs/<id>/fs.audit.jsonl`; the text/JSON view
+shows what changed, and file contents are never recorded. This is audit-only,
+rootless, and does not provide PID or reliable exec attribution.
+
 ### “I need one GPU for a local model run”
 
 **How sandboxer delivers:** GPU access is explicit and limited to the selected
@@ -181,7 +206,7 @@ exposed unless requested.
 ```sh
 sandboxer upgrade --check
 sandboxer upgrade
-sandboxer upgrade --version v0.1.0-dev.5
+sandboxer upgrade --version v0.1.0-dev.6
 ```
 
 To follow development prereleases:
@@ -202,7 +227,7 @@ Download the checksum files for a release and verify them against the published
 allowed-signers file:
 
 ```sh
-tag=v0.1.0-dev.5
+tag=v0.1.0-dev.6
 base="https://github.com/PolasekT/sandboxer-releases/releases/download/$tag"
 curl -fsSLO "$base/SHA256SUMS"
 curl -fsSLO "$base/SHA256SUMS.sig"
