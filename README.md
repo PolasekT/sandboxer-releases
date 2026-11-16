@@ -1,8 +1,8 @@
 # sandboxer releases
 
-This repository contains release artifacts and a short, task-oriented guide for
-sandboxer. The source repository is private; this repository is public so
-installs and upgrades can work without source access.
+Static Linux release artifacts and a short, task-oriented guide for sandboxer.
+The source repository is private; this repository is public so installs and
+upgrades work without source access.
 
 Each release includes:
 
@@ -13,14 +13,7 @@ Each release includes:
 
 ## Install
 
-Install the latest stable release:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
-  SANDBOXER_STREAM=release bash
-```
-
-Install the latest development prerelease:
+Install the current development prerelease:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
@@ -31,29 +24,23 @@ Pin a specific tag:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
-  SANDBOXER_VERSION=v0.1.0-dev.7 bash
+  SANDBOXER_VERSION=v0.1.0-dev.8 bash
 ```
 
 The installer verifies `SHA256SUMS`, installs to `~/.local/bin` by default, and
-does not use `sudo` or edit shell rc files.
+does not use `sudo` or edit shell rc files. Confirm the installed build with:
 
-## Release status
+```sh
+sandboxer version
+```
 
-Phase 20 is closed for the **policy-only** transparent-interception slice. The
-experimental `--transparent-intercept mitm-all` provider-injection mode is
-available behind an explicit opt-in, but it is **not finalized**: public-IPv6
-production traffic, controlled churn/concurrency, and hard-kill cleanup remain
-open. Do not treat provider POST APIs as fully supported yet.
-
-Phase 21 adds optional **rootless, audit-only filesystem auditing** in
-`v0.1.0-dev.6` and later. It records path/operation events, not file contents.
-It does not provide PID or reliable exec attribution; the optional privileged
-tier remains deferred.
+Release builds print the release tag, commit, target, and profile. Stable
+releases use `SANDBOXER_STREAM=release` when available; development prereleases
+use `SANDBOXER_STREAM=dev`.
 
 ## What do you need?
 
-These are shipped workflows, not a roadmap. Commands assume `sandboxer` is on
-`PATH` after installation.
+Commands assume `sandboxer` is on `PATH` after installation.
 
 ### “I need to run an agent on a real project without exposing my home directory”
 
@@ -119,8 +106,8 @@ sandboxer run --net internet -- curl -fsS https://example.com/
 **Expected:** the request succeeds through the proxy; host and private network
 destinations remain unreachable.
 
-This mode currently covers HTTP(S) clients that honor proxy settings. Raw TCP,
-SSH, UDP, ICMP, and apps that ignore proxy variables are not covered.
+This mode covers HTTP(S) clients that honor proxy settings. Raw TCP, SSH, UDP,
+ICMP, and apps that ignore proxy variables are not covered.
 
 ### “I need hostname-aware policy for tools that ignore proxy settings”
 
@@ -130,12 +117,18 @@ and blocks UDP 443 and non-DNS UDP.
 
 ```sh
 sandboxer run --net transparent --transparent-intercept policy \
-  --allow example.com -- curl -fsS https://example.com/
+  --allow example.com --allow 203.0.113.0/24:443 \
+  -- curl -fsS https://example.com/
 ```
 
-**Expected:** allowed hosts connect through the interceptor; denied hosts fail
-closed. Raw `--net transparent` remains unchanged when interception is not
-selected.
+**Expected:** allowed hosts, IPs, and CIDRs connect through the interceptor;
+denied destinations fail closed. IPv4 and IPv6 use the same policy path; IPv6
+fails closed when the host has no usable route. Raw `--net transparent` remains
+unchanged when interception is not selected.
+
+Explicit hosts, IPs, CIDRs, and service endpoints are resolved before entering
+the pasta namespace. Wildcard allow patterns and port-range rules still depend
+on the helper resolver.
 
 OpenCode’s default `all` network profile is broad. Use `--net-profile secure` or
 explicit `--service`/`--allow` rules when you want a narrower interception
@@ -152,14 +145,30 @@ sandboxer run --net transparent --transparent-intercept mitm-all \
   --service <provider-service> -- curl -fsS https://<provider-host>/...
 ```
 
-**Expected:** only the selected provider host receives the injected header;
-chunked request bodies fail closed. This mode remains experimental and
-intentionally unfinalized, and the app must trust the per-run CA.
+**Expected:** only the selected provider host receives the injected header. The
+app must trust the per-run CA. Chunked MITM request bodies fail closed, and
+HTTP/2-only clients are not supported. This mode is experimental; use it only
+with providers and workflows you have tested.
+
+### “I need to reach a local service without host networking”
+
+**How sandboxer delivers:** explicit TCP, UDP, HTTP, or Unix host-service relays
+expose only the selected endpoint through a run-private socket.
+
+```sh
+sandboxer run opencode --host-service 127.0.0.1:5432
+```
+
+**Expected:** the app can reach that loopback service through a run-private
+guest relay; the relay path is exposed in `SANDBOXER_HOST_SERVICE_<NAME>`. Other
+host network destinations remain unavailable. Non-loopback targets require
+explicit approval.
 
 ### “I need to know what network decisions a run made”
 
-**How sandboxer delivers:** opt-in audit mode records network allowances, denials,
-and lifecycle events without logging bodies, authorization headers, or secrets.
+**How sandboxer delivers:** opt-in audit mode records network allowances,
+denials, and lifecycle events without logging bodies, authorization headers, or
+secrets.
 
 ```sh
 sandboxer run --audit --net proxy -- curl -fsS https://example.com/
@@ -201,12 +210,41 @@ sandboxer run --gpu 1 -- python train.py
 **Expected:** the process sees the selected GPU only; host GPU access is not
 exposed unless requested.
 
+### “I need to run on an SELinux-enforcing host”
+
+**How sandboxer delivers:** `doctor` probes Bubblewrap’s `/proc` mask mounts and
+reports whether SELinux blocks them. If blocked, it recommends a narrow policy
+or AVC-generated policy instead of asking you to disable SELinux. It also warns
+when Bubblewrap is older than 0.13 instead of treating overlay support as a hard
+failure.
+
+```sh
+sandboxer doctor
+```
+
+**Expected:** the report identifies host, SELinux, namespace, overlay, and
+sandbox readiness issues with an actionable next step. Sandboxer never runs
+`sudo`, `semodule`, or `setenforce` itself.
+
+### “I need OpenCode’s terminal identity and colors to survive”
+
+**How sandboxer delivers:** OpenCode runs preserve the host terminal identity
+(`TERM_PROGRAM`, `TERM_PROGRAM_VERSION`) and color preferences without
+forwarding unrelated terminal variables.
+
+```sh
+sandboxer run opencode
+```
+
+**Expected:** OpenCode recognizes the host terminal and color settings inside
+the sandbox, while unrelated terminal environment values stay outside.
+
 ## Upgrade
 
 ```sh
 sandboxer upgrade --check
 sandboxer upgrade
-sandboxer upgrade --version v0.1.0-dev.7
+sandboxer upgrade --version v0.1.0-dev.8
 ```
 
 To follow development prereleases:
@@ -227,7 +265,7 @@ Download the checksum files for a release and verify them against the published
 allowed-signers file:
 
 ```sh
-tag=v0.1.0-dev.7
+tag=v0.1.0-dev.8
 base="https://github.com/PolasekT/sandboxer-releases/releases/download/$tag"
 curl -fsSLO "$base/SHA256SUMS"
 curl -fsSLO "$base/SHA256SUMS.sig"
