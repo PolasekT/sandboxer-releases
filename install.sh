@@ -20,7 +20,12 @@ trap cleanup EXIT
 if [ -n "$TOKEN" ]; then
   AUTH_CONFIG="$(mktemp)"
   chmod 600 "$AUTH_CONFIG"
-  printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" > "$AUTH_CONFIG"
+  AUTH_TOKEN=${TOKEN//\\/\\\\}
+  AUTH_TOKEN=${AUTH_TOKEN//\"/\\\"}
+  AUTH_TOKEN=${AUTH_TOKEN//$'\n'/}
+  AUTH_TOKEN=${AUTH_TOKEN//$'\r'/}
+  printf 'header = "Authorization: Bearer %s"\n' "$AUTH_TOKEN" > "$AUTH_CONFIG"
+  unset AUTH_TOKEN
   CURL_AUTH=(--config "$AUTH_CONFIG")
 fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -104,6 +109,27 @@ if [ -z "$VERSION" ]; then
   exit 1
 fi
 
+case "$VERSION" in
+  *-dev.*) STABLE=0 ;;
+  *) STABLE=1 ;;
+esac
+ALLOWED_SIGNERS="${SANDBOXER_RELEASE_ALLOWED_SIGNERS:-}"
+if [ "$STABLE" = "1" ]; then
+  if [ -z "$ALLOWED_SIGNERS" ]; then
+    default_signers="${XDG_CONFIG_HOME:-$HOME/.config}/sandboxer/release_allowed_signers"
+    if [ -f "$default_signers" ]; then
+      ALLOWED_SIGNERS="$default_signers"
+    fi
+  fi
+  if [ -z "$ALLOWED_SIGNERS" ]; then
+    printf 'sandboxer installer: stable releases require an allowed-signers file\n' >&2
+    printf '  set SANDBOXER_RELEASE_ALLOWED_SIGNERS or install %s\n' \
+      "${XDG_CONFIG_HOME:-$HOME/.config}/sandboxer/release_allowed_signers" >&2
+    exit 1
+  fi
+  need ssh-keygen
+fi
+
 ASSET="sandboxer-${VERSION}-${TARGET}.tar.gz"
 BASE="${SANDBOXER_DOWNLOAD_BASE:-https://github.com/$REPO/releases/download/$VERSION}"
 TMP="$(mktemp -d)"
@@ -122,7 +148,6 @@ if [ "$EXPECTED" != "$ACTUAL" ]; then
   exit 1
 fi
 
-ALLOWED_SIGNERS="${SANDBOXER_RELEASE_ALLOWED_SIGNERS:-}"
 if [ -n "$ALLOWED_SIGNERS" ]; then
   need ssh-keygen
   curl -fsSL "${CURL_AUTH[@]}" --retry 3 -o "$TMP/SHA256SUMS.sig" "$BASE/SHA256SUMS.sig"
@@ -140,6 +165,21 @@ fi
 install -m 0755 "$BINARY" "$INSTALL_DIR/sandboxer"
 
 printf 'Installed %s\n' "$INSTALL_DIR/sandboxer"
+
+# Remember the installed stream so the first `upgrade` does not silently
+# switch a dev install to the stable stream.
+INSTALL_STREAM="$STREAM"
+if [ -n "$VERSION" ]; then
+  case "$VERSION" in
+    *-dev.*) INSTALL_STREAM=dev ;;
+    *) INSTALL_STREAM=release ;;
+  esac
+fi
+CONFIG_DIR="${SANDBOXER_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/sandboxer}"
+mkdir -p "$CONFIG_DIR"
+printf 'stream = "%s"\nversion = "%s"\n' "$INSTALL_STREAM" "$VERSION" > "$CONFIG_DIR/install.toml"
+printf '  stream: %s\n' "$INSTALL_STREAM"
+
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
   *)
