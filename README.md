@@ -8,10 +8,21 @@ Each release includes:
 
 - static musl tarballs for `x86_64` and `aarch64`;
 - `SHA256SUMS`;
-- an optional detached `SHA256SUMS.sig`;
+- a detached `SHA256SUMS.sig` for stable releases (dev releases may be
+  checksum-only when no signing key is configured);
 - `install.sh`.
 
 ## Install
+
+Install the current stable release (stable installs require an allowed-signers
+file and a valid detached signature):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
+  SANDBOXER_STREAM=release \
+  SANDBOXER_RELEASE_ALLOWED_SIGNERS="$HOME/.config/sandboxer/release_allowed_signers" \
+  bash
+```
 
 Install the current development prerelease:
 
@@ -28,7 +39,10 @@ curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/
 ```
 
 The installer verifies `SHA256SUMS`, installs to `~/.local/bin` by default, and
-does not use `sudo` or edit shell rc files. Confirm the installed build with:
+does not use `sudo` or edit shell rc files. Stable releases require detached
+signature verification with an allowed-signers file; development prereleases
+may use checksum-only bootstrap when no signers file is configured. Confirm the
+installed build with:
 
 ```sh
 sandboxer version
