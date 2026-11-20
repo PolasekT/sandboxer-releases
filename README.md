@@ -58,6 +58,8 @@ Commands assume `sandboxer` is on `PATH`.
 ```sh
 cd ~/src/my-project
 sandboxer run opencode
+# or the shipped Antigravity CLI app:
+sandboxer run agy
 ```
 
 The workspace is mounted at the same absolute path. Unrelated host home files,
