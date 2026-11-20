@@ -187,6 +187,7 @@ and network profiles.
 sandboxer run opencode --profile shared
 sandboxer run opencode --profile name:review-2026
 sandboxer run opencode --fresh
+sandboxer profile reset --app agy   # delete the current default profile
 sandboxer run --gpu 1 -- python train.py
 ```
 
