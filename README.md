@@ -1,21 +1,21 @@
 # sandboxer releases
 
 Static Linux release artifacts and a short, task-oriented guide for sandboxer.
-The source repository is private; this repository is public so installs and
+The source repository is private; this repository is public so installation and
 upgrades work without source access.
 
 Each release includes:
 
 - static musl tarballs for `x86_64` and `aarch64`;
 - `SHA256SUMS`;
-- a detached `SHA256SUMS.sig` for stable releases (dev releases may be
+- `SHA256SUMS.sig` for stable releases (development releases may be
   checksum-only when no signing key is configured);
 - `install.sh`.
 
 ## Install
 
-Install the current stable release (stable installs require an allowed-signers
-file and a valid detached signature):
+Stable installs require a configured allowed-signers file and a valid detached
+signature:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
@@ -24,56 +24,46 @@ curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/
   bash
 ```
 
-Install the current development prerelease:
+Development prereleases may use checksum-only bootstrap when no signers file is
+configured:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
   SANDBOXER_STREAM=dev bash
 ```
 
-Pin a specific tag:
+Pin a tag:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
-  SANDBOXER_VERSION=v0.1.0 bash
+  SANDBOXER_VERSION=v0.2.0 bash
 ```
 
 The installer verifies `SHA256SUMS`, installs to `~/.local/bin` by default, and
-does not use `sudo` or edit shell rc files. Stable releases require detached
-signature verification with an allowed-signers file; development prereleases
-may use checksum-only bootstrap when no signers file is configured. Confirm the
-installed build with:
+does not use `sudo` or edit shell rc files. Verify the installed build:
 
 ```sh
 sandboxer version
+sandboxer doctor
 ```
 
-Release builds print the release tag, commit, target, and profile. Stable
-releases use `SANDBOXER_STREAM=release` when available; development prereleases
-use `SANDBOXER_STREAM=dev`.
+Release builds report the release tag, commit, target, and profile.
 
-## What do you need?
+## Common workflows
 
-Commands assume `sandboxer` is on `PATH` after installation.
+Commands assume `sandboxer` is on `PATH`.
 
-### “I need to run an agent on a real project without exposing my home directory”
-
-**How sandboxer delivers:** the workspace is mounted at the same absolute path,
-while the rest of the host home, host processes, and unrelated host files stay
-outside.
+### Run an agent on a real project
 
 ```sh
 cd ~/src/my-project
 sandboxer run opencode
 ```
 
-**Expected:** OpenCode starts at the same absolute workspace path as the host,
-and unrelated host files outside that workspace are unavailable.
+The workspace is mounted at the same absolute path. Unrelated host home files,
+processes, and devices stay outside the sandbox.
 
-### “I need to review an agent’s changes before they touch my workspace”
-
-**How sandboxer delivers:** overlay mode writes to a copy-on-write layer; nothing
-is applied until you ask for it.
+### Review before applying
 
 ```sh
 sandboxer run opencode --mode overlay --overlay-persist review --net none
@@ -81,53 +71,32 @@ sandboxer overlay diff review --app opencode
 sandboxer overlay apply review --app opencode
 ```
 
-**Expected:** the workspace is unchanged by the run, `overlay diff` shows the
-pending changes, and `overlay apply` is the explicit step that writes them.
+The first command leaves the workspace untouched. `overlay diff` shows the
+pending changes, and `overlay apply` is the explicit write step.
 
-### “I need to run a command with no network”
-
-**How sandboxer delivers:** `--net none` removes network access for that run.
+### Run offline, read-only, or as a one-off
 
 ```sh
 sandboxer run --net none -- cargo test
+sandboxer run --mode ro --net none -- git diff
+sandboxer run --net internet -- curl -fsS https://example.com/
 ```
 
-**Expected:** the command runs at the workspace path with no network access.
+`internet` mode is proxy-backed public HTTP(S). Raw TCP, SSH, UDP, ICMP, and apps
+that ignore proxy variables are not covered.
 
-### “I need a background agent I can reconnect to”
-
-**How sandboxer delivers:** detached runs keep a supervisor and session
-metadata; attach reconnects to the running app.
+### Detached sessions
 
 ```sh
 sandboxer run opencode --detach
 sandboxer session list
 sandboxer session attach <run-id>
+sandboxer session stop <run-id>
 ```
 
-**Expected:** the run continues under the supervisor after the terminal closes;
-`session attach` reconnects to it, and `session stop` ends it.
+The run continues under the supervisor after the terminal closes.
 
-### “I need public web access without giving the app the host network”
-
-**How sandboxer delivers:** proxy-backed `internet` mode permits public HTTP(S)
-while private, loopback, and link-local destinations remain blocked.
-
-```sh
-sandboxer run --net internet -- curl -fsS https://example.com/
-```
-
-**Expected:** the request succeeds through the proxy; host and private network
-destinations remain unreachable.
-
-This mode covers HTTP(S) clients that honor proxy settings. Raw TCP, SSH, UDP,
-ICMP, and apps that ignore proxy variables are not covered.
-
-### “I need hostname-aware policy for tools that ignore proxy settings”
-
-**How sandboxer delivers:** opt-in transparent interception parses HTTP `Host`
-and TLS SNI inside the pasta namespace, applies the existing allow/deny policy,
-and blocks UDP 443 and non-DNS UDP.
+### Hostname-aware transparent policy
 
 ```sh
 sandboxer run --net transparent --transparent-intercept policy \
@@ -135,155 +104,122 @@ sandboxer run --net transparent --transparent-intercept policy \
   -- curl -fsS https://example.com/
 ```
 
-**Expected:** allowed hosts, IPs, and CIDRs connect through the interceptor;
-denied destinations fail closed. IPv4 and IPv6 use the same policy path; IPv6
-fails closed when the host has no usable route. Raw `--net transparent` remains
-unchanged when interception is not selected.
+Allowed hosts, IPs, and CIDRs connect through the interceptor; denied
+destinations fail closed. Raw `--net transparent` remains available without
+interception. Wildcard allow patterns and port-range rules still use the helper
+resolver.
 
-Explicit hosts, IPs, CIDRs, and service endpoints are resolved before entering
-the pasta namespace. Wildcard allow patterns and port-range rules still depend
-on the helper resolver.
+Optional dependencies for transparent modes are `pasta`/`passt`, `nft`, and
+`/dev/net/tun`. IPv6 and ICMP depend on host support.
 
-OpenCode’s default `all` network profile is broad. Use `--net-profile secure` or
-explicit `--service`/`--allow` rules when you want a narrower interception
-policy.
-
-### “I need injected provider credentials only for selected APIs”
-
-**How sandboxer delivers:** the experimental `mitm-all` mode terminates HTTPS
-with a per-run CA and injects configured provider headers only for explicitly
-selected provider hosts. Non-provider TLS passes through end-to-end.
+### Provider credential injection
 
 ```sh
 sandboxer run --net transparent --transparent-intercept mitm-all \
   --service <provider-service> -- curl -fsS https://<provider-host>/...
 ```
 
-**Expected:** only the selected provider host receives the injected header. The
-app must trust the per-run CA. Chunked MITM request bodies fail closed, and
-HTTP/2-only clients are not supported. This mode is experimental; use it only
+Only selected provider hosts receive the injected header. The app must trust the
+per-run CA. This mode is experimental, supports HTTP/1.1, and should be used only
 with providers and workflows you have tested.
 
-### “I need to reach a local service without host networking”
-
-**How sandboxer delivers:** explicit TCP, UDP, HTTP, or Unix host-service relays
-expose only the selected endpoint through a run-private socket.
+### Host services and publishing
 
 ```sh
+# Reach one host TCP/UDP service through a run-private relay.
 sandboxer run opencode --host-service 127.0.0.1:5432
+sandboxer run opencode --host-port udp:127.0.0.1:5353
+
+# Publish a guest loopback port on host loopback.
+sandboxer run --publish 127.0.0.1:8080:3000 -- npm run dev
+sandboxer run --publish 127.0.0.1:5353:5353/udp -- dns-server
 ```
 
-**Expected:** the app can reach that loopback service through a run-private
-guest relay; the relay path is exposed in `SANDBOXER_HOST_SERVICE_<NAME>`. Other
-host network destinations remain unavailable. Non-loopback targets require
-explicit approval.
+Loopback publishes are visible to other local users. External binds require
+`--publish-external` and explicit review.
 
-### “I need to know what network decisions a run made”
+### Mount a host path
 
-**How sandboxer delivers:** opt-in audit mode records network allowances,
-denials, and lifecycle events without logging bodies, authorization headers, or
-secrets.
+```sh
+sandboxer run opencode --bind /srv/data
+sandboxer run opencode --bind /srv/data:ro
+sandboxer run opencode --mount /srv/data:/data:ro
+```
+
+Sensitive host sources require `--mount-force`; prefer narrow paths over broad
+home-directory mounts.
+
+### Audit changes and network decisions
 
 ```sh
 sandboxer run --audit --net proxy -- curl -fsS https://example.com/
 sandboxer session audit <run-id> --json
-```
 
-**Expected:** the run ID has a JSONL audit trail with host, port, decision, and
-reason fields.
-
-### “I need to know which files an agent changed”
-
-**How sandboxer delivers:** opt-in rootless filesystem audit records workspace
-and selected-profile path/operation events without logging file contents or
-secrets. It works in rw, ro, ephemeral overlay, and persistent overlay modes.
-
-```sh
 sandboxer run --fs-audit --net none -- sh -c 'echo changed > notes.txt'
-sandboxer session fs-audit <run-id>
 sandboxer session fs-audit <run-id> --json
 ```
 
-Add `--fs-audit-reads` to include open/read/access events. Events include
-create, write, attrib, rename, unlink, and explicit overflow/unavailable
-degradation markers. Overlay events report the guest workspace path.
+Audit is opt-in and does not log bodies, file contents, authorization headers,
+or secrets. Filesystem audit is audit-only and rootless; it does not provide
+reliable PID/exec attribution.
 
-**Expected:** the run produces `runs/<id>/fs.audit.jsonl`; the text/JSON view
-shows what changed, and file contents are never recorded. This is audit-only,
-rootless, and does not provide PID or reliable exec attribution.
-
-### “I need one GPU for a local model run”
-
-**How sandboxer delivers:** GPU access is explicit and limited to the selected
-devices.
+### Snapshots, dashboard, and authoring
 
 ```sh
+sandboxer snapshot create --app opencode --name before-refactor
+sandboxer snapshot diff <a> <b>
+sandboxer snapshot restore <id>
+
+sandboxer dash
+sandboxer wizard
+```
+
+`dash` opens the Overview graph and the Sessions, Apps, Services, Providers,
+Mounts, Network, Profiles, Snapshots, Overlays, Patches, Audit, and Doctor views.
+`wizard` authors apps, services, providers, host services, mounts, network rules,
+and network profiles.
+
+### Profiles and GPU
+
+```sh
+sandboxer run opencode --profile shared
+sandboxer run opencode --profile name:review-2026
+sandboxer run opencode --fresh
 sandboxer run --gpu 1 -- python train.py
 ```
 
-**Expected:** the process sees the selected GPU only; host GPU access is not
-exposed unless requested.
-
-### “I need to run on an SELinux-enforcing host”
-
-**How sandboxer delivers:** `doctor` probes Bubblewrap’s `/proc` mask mounts and
-reports whether SELinux blocks them. If blocked, it recommends a narrow policy
-or AVC-generated policy instead of asking you to disable SELinux. It also warns
-when Bubblewrap is older than 0.13 instead of treating overlay support as a hard
-failure.
-
-```sh
-sandboxer doctor
-```
-
-**Expected:** the report identifies host, SELinux, namespace, overlay, and
-sandbox readiness issues with an actionable next step. Sandboxer never runs
-`sudo`, `semodule`, or `setenforce` itself.
-
-### “I need OpenCode’s terminal identity and colors to survive”
-
-**How sandboxer delivers:** OpenCode runs preserve the host terminal identity
-(`TERM_PROGRAM`, `TERM_PROGRAM_VERSION`) and color preferences without
-forwarding unrelated terminal variables.
-
-```sh
-sandboxer run opencode
-```
-
-**Expected:** OpenCode recognizes the host terminal and color settings inside
-the sandbox, while unrelated terminal environment values stay outside.
+Named profiles use the explicit `name:<name>` form. GPU passthrough is limited
+to the selected devices and weakens isolation.
 
 ## Upgrade
 
 ```sh
 sandboxer upgrade --check
 sandboxer upgrade
-sandboxer upgrade --version v0.1.0
+sandboxer upgrade --version v0.2.0
 ```
 
-To follow development prereleases:
+Follow development prereleases with:
 
 ```sh
 sandboxer upgrade --check --stream dev
 sandboxer upgrade --stream dev
 ```
 
-The installer records the selected stream and version; `upgrade` follows that
-stream by default, and an explicit `-dev.N` version selects the dev stream
-automatically. `upgrade` defaults to this public release repository. Set
-`SANDBOXER_RELEASE_REPO=owner/repository` to use a mirror.
+The installer records the selected stream and version; `upgrade` follows it by
+default. `upgrade` verifies checksums, replaces the binary atomically, and keeps
+the previous binary for rollback. A configured signer policy also applies to
+`--check` and `--dry-run`: a release without `SHA256SUMS.sig` is refused.
 
-## Verification
-
-Download the checksum files for a release and verify them against the published
-allowed-signers file:
+## Verify release assets
 
 ```sh
-tag=v0.1.0
+tag=v0.2.0
 base="https://github.com/PolasekT/sandboxer-releases/releases/download/$tag"
 curl -fsSLO "$base/SHA256SUMS"
 curl -fsSLO "$base/SHA256SUMS.sig"
 curl -fsSLO "https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/release_allowed_signers"
+
 ssh-keygen -Y verify \
   -f release_allowed_signers \
   -I sandboxer-release \
@@ -291,11 +227,17 @@ ssh-keygen -Y verify \
   -s SHA256SUMS.sig < SHA256SUMS
 ```
 
-If a release was published without signing, `SHA256SUMS.sig` is absent and the
-release notes contain a checksum-only warning.
+Development releases published without a signing key omit `SHA256SUMS.sig` and
+carry a checksum-only warning in their release notes.
 
 ## Security
 
 Release artifacts are built by the tag-triggered workflow in the private source
-repository. Do not report source vulnerabilities or request source access here.
-Use the private source repository’s maintainer channel for security reports.
+repository. Do not report source vulnerabilities or request source access here;
+use the private source repository’s maintainer channel for security reports.
+
+Sandboxer contains cooperative or semi-trusted tools; it is not a guarantee
+against a hostile kernel exploit. Review the source repository’s usage and
+security documentation for limitations, including host networking, GPU
+passthrough, same-UID co-tenancy, cgroup fail-open, and experimental transparent
+MITM.
