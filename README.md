@@ -183,8 +183,9 @@ sandboxer wizard
 `dash` opens the Overview graph and the Sessions, Apps, Services, Providers,
 Mounts, Network, Profiles, Snapshots, Overlays, Patches, Audit, and Doctor views.
 On the Apps and Services views, `n` opens the authoring wizard and `e` edits the
-selected definition. `wizard` authors apps, services, providers, host services,
-mounts, network rules, and network profiles.
+selected definition. `Ctrl-P` opens the command palette; `Ctrl-3` and `Ctrl-4`
+open Settings and Help. `wizard` authors apps, services, providers, host
+services, mounts, network rules, and network profiles.
 
 ### Profiles and GPU
 
