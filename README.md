@@ -149,7 +149,9 @@ sandboxer run opencode --mount /srv/data:/data:ro
 ```
 
 Sensitive host sources require `--mount-force`; prefer narrow paths over broad
-home-directory mounts.
+home-directory mounts. Workspaces rooted under `~/.config`, `~/.cache`, or
+`~/.local` are rejected as credential/XDG/runtime trees; use a normal project
+directory instead.
 
 ### Audit changes and network decisions
 
@@ -163,7 +165,9 @@ sandboxer session fs-audit <run-id> --json
 
 Audit is opt-in and does not log bodies, file contents, authorization headers,
 or secrets. Filesystem audit is audit-only and rootless; it does not provide
-reliable PID/exec attribution.
+reliable PID/exec attribution. Host-observation audit uses the bounded `strace`
+adapter by default. Native `ptrace` is an explicit x86_64 opt-in with
+`--engine ptrace`; aarch64 audit smoke is deferred for `v0.2.0`.
 
 ### Snapshots, dashboard, and authoring
 
