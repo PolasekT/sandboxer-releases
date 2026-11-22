@@ -15,7 +15,17 @@ Each release includes:
 ## Install
 
 Stable installs require a configured allowed-signers file and a valid detached
-signature:
+signature. Install the public signer once:
+
+```sh
+mkdir -p "$HOME/.config/sandboxer"
+curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/release_allowed_signers \
+  -o "$HOME/.config/sandboxer/release_allowed_signers"
+chmod 0644 "$HOME/.config/sandboxer/release_allowed_signers"
+```
+
+The installer can also offer to fetch this file interactively when run from a
+terminal. Then install:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
@@ -36,7 +46,7 @@ Pin a tag:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
-  SANDBOXER_VERSION=v0.2.0 bash
+  SANDBOXER_VERSION=v0.2.1 bash
 ```
 
 The installer verifies `SHA256SUMS`, installs to `~/.local/bin` by default, and
@@ -245,7 +255,7 @@ to the selected devices and weakens isolation.
 ```sh
 sandboxer upgrade --check
 sandboxer upgrade
-sandboxer upgrade --version v0.2.0
+sandboxer upgrade --version v0.2.1
 ```
 
 Follow development prereleases with:
@@ -263,7 +273,7 @@ the previous binary for rollback. A configured signer policy also applies to
 ## Verify release assets
 
 ```sh
-tag=v0.2.0
+tag=v0.2.1
 base="https://github.com/PolasekT/sandboxer-releases/releases/download/$tag"
 curl -fsSLO "$base/SHA256SUMS"
 curl -fsSLO "$base/SHA256SUMS.sig"
