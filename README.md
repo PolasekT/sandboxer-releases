@@ -65,6 +65,34 @@ sandboxer run agy
 The workspace is mounted at the same absolute path. Unrelated host home files,
 processes, and devices stay outside the sandbox.
 
+### Diagnose the host
+
+```sh
+sandboxer doctor
+sandboxer doctor --self-test
+sandboxer doctor --containment
+sandboxer doctor --full
+```
+
+Start with the fast default check. `--self-test` adds local probes,
+`--containment` verifies the sandbox boundary, and `--full` combines them. Use
+`--json` when you need a stable machine-readable report.
+
+### Observe before authoring policy
+
+Host-observation audit runs an app without containment so you can review what it
+accesses before writing a policy:
+
+```sh
+sandboxer audit opencode --out ~/audits/opencode.jsonl --yes
+sandboxer wizard --from-audit ~/audits/opencode.jsonl
+```
+
+`audit` prints a warning and requires confirmation (or `--yes`). The bounded
+`strace` engine is the default; on x86_64, `--engine ptrace` selects the native
+engine. The wizard shows observed services, safe mounts, and explicit-port allow
+rules for review and does not broaden policy automatically.
+
 ### Review before applying
 
 ```sh
@@ -161,6 +189,9 @@ sandboxer session audit <run-id> --json
 
 sandboxer run --fs-audit --net none -- sh -c 'echo changed > notes.txt'
 sandboxer session fs-audit <run-id> --json
+
+sandboxer audit opencode --out ~/audits/opencode.jsonl --yes
+sandboxer wizard --from-audit ~/audits/opencode.jsonl
 ```
 
 Audit is opt-in and does not log bodies, file contents, authorization headers,
@@ -176,6 +207,8 @@ sandboxer snapshot create --app opencode --name before-refactor
 sandboxer snapshot diff <a> <b>
 sandboxer snapshot restore <id>
 
+sandboxer config diff
+sandboxer config migrate --dry-run
 sandboxer dash
 sandboxer wizard
 ```
@@ -185,7 +218,14 @@ Mounts, Network, Profiles, Snapshots, Overlays, Patches, Audit, and Doctor views
 On the Apps and Services views, `n` opens the authoring wizard and `e` edits the
 selected definition. `Ctrl-P` opens the command palette; `Ctrl-3` and `Ctrl-4`
 open Settings and Help. `wizard` authors apps, services, providers, host
-services, mounts, network rules, and network profiles.
+services, mounts, network rules, and network profiles, and can start from an
+audit. Typed starts and in-place edits are available directly:
+
+```sh
+sandboxer wizard app
+sandboxer wizard network-profile
+sandboxer wizard --edit app:my-agent
+```
 
 ### Profiles and GPU
 
