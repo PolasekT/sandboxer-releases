@@ -46,7 +46,7 @@ Pin a tag:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
-  SANDBOXER_VERSION=v0.2.1 bash
+  SANDBOXER_VERSION=v0.2.2 bash
 ```
 
 The installer verifies `SHA256SUMS`, installs to `~/.local/bin` by default, and
@@ -102,6 +102,87 @@ sandboxer wizard --from-audit ~/audits/opencode.jsonl
 `strace` engine is the default; on x86_64, `--engine ptrace` selects the native
 engine. The wizard shows observed services, safe mounts, and explicit-port allow
 rules for review and does not broaden policy automatically.
+
+### Keep local rules close to the project
+
+**What I need:** I keep a project on an external SSD under `/mnt` and want to
+run it without weakening the workspace guard for every repository.
+
+**How sandboxer delivers:** `/mnt` and `/media` themselves stay blocked, but
+descendant project paths are allowed with a warning. Truly protected paths still
+require the explicit run override.
+
+**Try it:**
+
+```sh
+cd /mnt/ssd/home/me/projects/my-project
+sandboxer run opencode-ei
+# For an intentionally reviewed protected path:
+sandboxer run --allow-unsafe-workspace opencode-ei
+```
+
+**Expected:** the first command prints a mount-root warning and starts; the
+second also records the protected-workspace override in run status and the agent
+manifest.
+
+**What I need:** I want a local folder and a development port available for
+`opencode*` runs without repeating `--bind`, `--allow`, and `--trust-project-config`.
+
+**How sandboxer delivers:** scoped override files add rules by app and workspace
+selector. User-global and user-local rules are trusted; tracked repository rules
+need explicit project trust for additive changes.
+
+**Try it:**
+
+```sh
+mkdir -p ~/.config/sandboxer/overrides.d
+cat > ~/.config/sandboxer/overrides.d/pylab.toml <<'EOF'
+schema = 1
+name = "pylab"
+
+[when]
+apps = ["opencode*"]
+
+[add]
+network.allow = ["127.0.0.1:5173", "pylab.internal:8443"]
+mounts = [{ source = "/mnt/ssd/shared/pylab", target = "/mnt/ssd/shared/pylab", mode = "ro" }]
+EOF
+sandboxer config explain
+sandboxer run opencode-ei
+```
+
+**Expected:** `config explain` lists the `pylab` rule and its sources, and the
+run gets the extra local port and read-only folder. Tracked
+`.sandboxer/overrides.d/` rules require `--trust-project-config` for additive
+rules; deny rules still apply with a warning.
+
+**What I need:** I want to silence audit noise and hide a workspace secret from
+the app without changing the global config.
+
+**How sandboxer delivers:** `audit.ignore` filters wizard evidence while leaving
+the raw JSONL intact. `visibility.ignore` masks matching workspace paths inside
+the sandbox; masks are workspace-only and currently require `rw`/`ro` mode.
+
+**Try it:**
+
+```sh
+printf '%s\n' '**/node_modules/**' >> .sandboxer/audit.ignore
+printf '%s\n' '.env' >> .sandboxer/visibility.ignore
+sandboxer wizard --from-audit ~/audits/opencode.jsonl
+```
+
+**Expected:** ignored audit paths are not proposed as mounts, `.env` content is
+empty inside the sandbox, and `config explain` identifies the policy source.
+
+**What I need:** when the agent needs a missing host or port, I want it to tell
+me the exact rule instead of probing or trying to bypass the sandbox.
+
+**How sandboxer delivers:** the generated AGENTS manifest lists the user and
+repository override locations and tells the agent to report a rule and stop.
+
+**Expected:** the agent names the blocked host/port or path and points to the
+appropriate `overrides.d` file; the host user reviews and applies it. Agents
+never edit policy files from inside the sandbox.
 
 ### Review before applying
 
@@ -255,7 +336,7 @@ to the selected devices and weakens isolation.
 ```sh
 sandboxer upgrade --check
 sandboxer upgrade
-sandboxer upgrade --version v0.2.1
+sandboxer upgrade --version v0.2.2
 ```
 
 Follow development prereleases with:
@@ -273,7 +354,7 @@ the previous binary for rollback. A configured signer policy also applies to
 ## Verify release assets
 
 ```sh
-tag=v0.2.1
+tag=v0.2.2
 base="https://github.com/PolasekT/sandboxer-releases/releases/download/$tag"
 curl -fsSLO "$base/SHA256SUMS"
 curl -fsSLO "$base/SHA256SUMS.sig"
