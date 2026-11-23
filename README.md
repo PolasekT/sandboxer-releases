@@ -75,33 +75,124 @@ sandboxer run agy
 The workspace is mounted at the same absolute path. Unrelated host home files,
 processes, and devices stay outside the sandbox.
 
-### Diagnose the host
+`agy` seeds existing host OAuth and presentation settings into project/shared
+profiles. For API-key auth, pass the key at runtime rather than writing it to
+config:
 
 ```sh
-sandboxer doctor
-sandboxer doctor --self-test
-sandboxer doctor --containment
-sandboxer doctor --full
+sandboxer run agy --env-from GEMINI_API_KEY
 ```
 
-Start with the fast default check. `--self-test` adds local probes,
-`--containment` verifies the sandbox boundary, and `--full` combines them. Use
-`--json` when you need a stable machine-readable report.
+### Review before applying
 
-### Observe before authoring policy
+```sh
+sandboxer run opencode --mode overlay --overlay-persist review --net none
+sandboxer overlay diff review --app opencode
+sandboxer overlay apply review --app opencode
+```
+
+The first command leaves the workspace untouched. `overlay diff` shows the
+pending changes, and `overlay apply` is the explicit write step.
+
+Store a run as a patch, inspect it, then apply it deliberately:
+
+```sh
+sandboxer run opencode --store-patch --net proxy
+sandboxer patch list
+sandboxer patch apply <patch-id> --check
+sandboxer patch apply <patch-id>
+```
+
+### Network modes
+
+```sh
+# Named services and explicit rules through the host proxy.
+sandboxer run opencode --net-profile secure
+sandboxer run opencode --service github
+sandboxer run opencode --allow '*.example.com:443' --deny admin.example.com
+
+# Public HTTP(S) through the proxy; host/private destinations stay blocked.
+sandboxer run --net internet -- curl -fsS https://example.com/
+
+# Raw public TCP/UDP/DNS/ICMP through pasta; no host/LAN/metadata access.
+sandboxer run --net transparent -- ping 1.1.1.1
+
+# Host/SNI policy for apps that ignore proxy variables.
+sandboxer run --net transparent --transparent-intercept policy \
+  --allow example.com -- curl -fsS https://example.com/
+```
+
+`internet` is proxy-backed and only covers clients that honor proxy settings.
+`transparent` requires `pasta`/`passt`, `nft`, and `/dev/net/tun`; IPv6 and ICMP
+depend on host support. The experimental `mitm-all` mode adds selective provider
+TLS injection and remains opt-in.
+
+### Detached sessions
+
+```sh
+sandboxer run opencode --detach
+sandboxer session list
+sandboxer session attach <run-id>
+sandboxer session logs <run-id> --follow
+sandboxer session stop <run-id>
+```
+
+The run continues under the supervisor after the terminal closes.
+
+### Host services and publishing
+
+```sh
+# Reach one host TCP/UDP service through a run-private relay.
+sandboxer run opencode --host-service 127.0.0.1:5432
+sandboxer run opencode --host-port udp:127.0.0.1:5353
+
+# Publish a guest loopback port on host loopback.
+sandboxer run --publish 127.0.0.1:8080:3000 -- npm run dev
+sandboxer run --publish 127.0.0.1:0:3000 -- npm run dev
+```
+
+Loopback publishes are visible to other local users. External binds require
+`--publish-external` and explicit review.
+
+### Mount a host path
+
+```sh
+sandboxer run opencode --bind /srv/data
+sandboxer run opencode --bind /srv/data:ro
+sandboxer run opencode --mount /srv/data:/data:ro
+```
+
+Sensitive host sources require `--mount-force`; prefer narrow paths over broad
+home-directory mounts. Workspaces rooted under `~/.config`, `~/.cache`, or
+`~/.local` are rejected as credential/XDG/runtime trees; use a normal project
+directory instead.
+
+### Observe and audit
 
 Host-observation audit runs an app without containment so you can review what it
-accesses before writing a policy:
+accesses before writing policy:
 
 ```sh
 sandboxer audit opencode --out ~/audits/opencode.jsonl --yes
 sandboxer wizard --from-audit ~/audits/opencode.jsonl
 ```
 
-`audit` prints a warning and requires confirmation (or `--yes`). The bounded
-`strace` engine is the default; on x86_64, `--engine ptrace` selects the native
-engine. The wizard shows observed services, safe mounts, and explicit-port allow
-rules for review and does not broaden policy automatically.
+Run-level and filesystem audit are opt-in:
+
+```sh
+sandboxer run --audit --net proxy -- curl -fsS https://example.com/
+sandboxer session audit <run-id> --json
+sandboxer proxy explain example.com:443 --json
+
+sandboxer run --fs-audit --net none -- sh -c 'echo changed > notes.txt'
+sandboxer session fs-audit <run-id> --json
+```
+
+Audit does not log bodies, file contents, authorization headers, or secrets.
+Filesystem audit is audit-only and rootless; it does not provide reliable
+PID/exec attribution. Host-observation audit uses the bounded `strace` adapter
+by default. Native `ptrace` is an explicit x86_64 opt-in with
+`--engine ptrace`; aarch64 audit smoke is deferred for this release.
 
 ### Keep local rules close to the project
 
@@ -125,8 +216,8 @@ sandboxer run --allow-unsafe-workspace opencode-ei
 second also records the protected-workspace override in run status and the agent
 manifest.
 
-**What I need:** I want a local folder and a development port available for
-`opencode*` runs without repeating `--bind`, `--allow`, and `--trust-project-config`.
+**What I need:** I want a local folder and development port available for
+`opencode*` runs without repeating flags.
 
 **How sandboxer delivers:** scoped override files add rules by app and workspace
 selector. User-global and user-local rules are trusted; tracked repository rules
@@ -151,17 +242,17 @@ sandboxer config explain
 sandboxer run opencode-ei
 ```
 
-**Expected:** `config explain` lists the `pylab` rule and its sources, and the
-run gets the extra local port and read-only folder. Tracked
-`.sandboxer/overrides.d/` rules require `--trust-project-config` for additive
-rules; deny rules still apply with a warning.
+**Expected:** `config explain` lists the rule and sources, and the run gets the
+local port and read-only folder. Tracked `.sandboxer/overrides.d/` rules require
+`--trust-project-config` for additive rules; deny rules still apply with a
+warning.
 
 **What I need:** I want to silence audit noise and hide a workspace secret from
-the app without changing the global config.
+the app without changing global config.
 
 **How sandboxer delivers:** `audit.ignore` filters wizard evidence while leaving
-the raw JSONL intact. `visibility.ignore` masks matching workspace paths inside
-the sandbox; masks are workspace-only and currently require `rw`/`ro` mode.
+raw JSONL intact. `visibility.ignore` masks matching workspace paths inside the
+sandbox; masks are workspace-only and currently require `rw`/`ro` mode.
 
 **Try it:**
 
@@ -171,133 +262,27 @@ printf '%s\n' '.env' >> .sandboxer/visibility.ignore
 sandboxer wizard --from-audit ~/audits/opencode.jsonl
 ```
 
-**Expected:** ignored audit paths are not proposed as mounts, `.env` content is
-empty inside the sandbox, and `config explain` identifies the policy source.
-
 **What I need:** when the agent needs a missing host or port, I want it to tell
 me the exact rule instead of probing or trying to bypass the sandbox.
 
-**How sandboxer delivers:** the generated AGENTS manifest lists the user and
+**How sandboxer delivers:** the generated AGENTS manifest lists user and
 repository override locations and tells the agent to report a rule and stop.
 
 **Expected:** the agent names the blocked host/port or path and points to the
 appropriate `overrides.d` file; the host user reviews and applies it. Agents
 never edit policy files from inside the sandbox.
 
-### Review before applying
-
-```sh
-sandboxer run opencode --mode overlay --overlay-persist review --net none
-sandboxer overlay diff review --app opencode
-sandboxer overlay apply review --app opencode
-```
-
-The first command leaves the workspace untouched. `overlay diff` shows the
-pending changes, and `overlay apply` is the explicit write step.
-
-### Run offline, read-only, or as a one-off
-
-```sh
-sandboxer run --net none -- cargo test
-sandboxer run --mode ro --net none -- git diff
-sandboxer run --net internet -- curl -fsS https://example.com/
-```
-
-`internet` mode is proxy-backed public HTTP(S). Raw TCP, SSH, UDP, ICMP, and apps
-that ignore proxy variables are not covered.
-
-### Detached sessions
-
-```sh
-sandboxer run opencode --detach
-sandboxer session list
-sandboxer session attach <run-id>
-sandboxer session stop <run-id>
-```
-
-The run continues under the supervisor after the terminal closes.
-
-### Hostname-aware transparent policy
-
-```sh
-sandboxer run --net transparent --transparent-intercept policy \
-  --allow example.com --allow 203.0.113.0/24:443 \
-  -- curl -fsS https://example.com/
-```
-
-Allowed hosts, IPs, and CIDRs connect through the interceptor; denied
-destinations fail closed. Raw `--net transparent` remains available without
-interception. Wildcard allow patterns and port-range rules still use the helper
-resolver.
-
-Optional dependencies for transparent modes are `pasta`/`passt`, `nft`, and
-`/dev/net/tun`. IPv6 and ICMP depend on host support.
-
-### Provider credential injection
-
-```sh
-sandboxer run --net transparent --transparent-intercept mitm-all \
-  --service <provider-service> -- curl -fsS https://<provider-host>/...
-```
-
-Only selected provider hosts receive the injected header. The app must trust the
-per-run CA. This mode is experimental, supports HTTP/1.1, and should be used only
-with providers and workflows you have tested.
-
-### Host services and publishing
-
-```sh
-# Reach one host TCP/UDP service through a run-private relay.
-sandboxer run opencode --host-service 127.0.0.1:5432
-sandboxer run opencode --host-port udp:127.0.0.1:5353
-
-# Publish a guest loopback port on host loopback.
-sandboxer run --publish 127.0.0.1:8080:3000 -- npm run dev
-sandboxer run --publish 127.0.0.1:5353:5353/udp -- dns-server
-```
-
-Loopback publishes are visible to other local users. External binds require
-`--publish-external` and explicit review.
-
-### Mount a host path
-
-```sh
-sandboxer run opencode --bind /srv/data
-sandboxer run opencode --bind /srv/data:ro
-sandboxer run opencode --mount /srv/data:/data:ro
-```
-
-Sensitive host sources require `--mount-force`; prefer narrow paths over broad
-home-directory mounts. Workspaces rooted under `~/.config`, `~/.cache`, or
-`~/.local` are rejected as credential/XDG/runtime trees; use a normal project
-directory instead.
-
-### Audit changes and network decisions
-
-```sh
-sandboxer run --audit --net proxy -- curl -fsS https://example.com/
-sandboxer session audit <run-id> --json
-
-sandboxer run --fs-audit --net none -- sh -c 'echo changed > notes.txt'
-sandboxer session fs-audit <run-id> --json
-
-sandboxer audit opencode --out ~/audits/opencode.jsonl --yes
-sandboxer wizard --from-audit ~/audits/opencode.jsonl
-```
-
-Audit is opt-in and does not log bodies, file contents, authorization headers,
-or secrets. Filesystem audit is audit-only and rootless; it does not provide
-reliable PID/exec attribution. Host-observation audit uses the bounded `strace`
-adapter by default. Native `ptrace` is an explicit x86_64 opt-in with
-`--engine ptrace`; aarch64 audit smoke is deferred for `v0.2.0`.
-
 ### Snapshots, dashboard, and authoring
 
 ```sh
 sandboxer snapshot create --app opencode --name before-refactor
-sandboxer snapshot diff <a> <b>
+sandboxer snapshot diff <a> <b> --stat
+sandboxer snapshot diff <a> <b> --patch
 sandboxer snapshot restore <id>
+sandboxer snapshot create --app opencode --workspace --name workspace-before-refactor
+sandboxer snapshot restore <id> --app opencode --workspace
 
+sandboxer config explain
 sandboxer config diff
 sandboxer config migrate --dry-run
 sandboxer dash
@@ -306,17 +291,23 @@ sandboxer wizard
 
 `dash` opens the Overview graph and the Sessions, Apps, Services, Providers,
 Mounts, Network, Profiles, Snapshots, Overlays, Patches, Audit, and Doctor views.
-On the Apps and Services views, `n` opens the authoring wizard and `e` edits the
-selected definition. `Ctrl-P` opens the command palette; `Ctrl-3` and `Ctrl-4`
-open Settings and Help. `wizard` authors apps, services, providers, host
-services, mounts, network rules, and network profiles, and can start from an
-audit. Typed starts and in-place edits are available directly:
+On Apps and Services, `n` opens the authoring wizard and `e` edits the selected
+definition. `Ctrl-P` opens the command palette; `Ctrl-3` and `Ctrl-4` open
+Settings and Help. `wizard` authors apps, services, providers, host services,
+mounts, network rules, and network profiles, and can start from an audit.
+
+### Diagnose the host
 
 ```sh
-sandboxer wizard app
-sandboxer wizard network-profile
-sandboxer wizard --edit app:my-agent
+sandboxer doctor
+sandboxer doctor --self-test
+sandboxer doctor --containment
+sandboxer doctor --full
 ```
+
+Start with the fast default check. `--self-test` adds local probes,
+`--containment` verifies the sandbox boundary, and `--full` combines them. Use
+`--json` when you need a stable machine-readable report.
 
 ### Profiles and GPU
 
@@ -324,7 +315,7 @@ sandboxer wizard --edit app:my-agent
 sandboxer run opencode --profile shared
 sandboxer run opencode --profile name:review-2026
 sandboxer run opencode --fresh
-sandboxer profile reset --app agy   # delete the current default profile
+sandboxer profile reset --app agy
 sandboxer run --gpu 1 -- python train.py
 ```
 
