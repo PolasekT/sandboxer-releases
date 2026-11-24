@@ -46,7 +46,7 @@ Pin a tag:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
-  SANDBOXER_VERSION=v0.2.2 bash
+  SANDBOXER_VERSION=v0.2.3 bash
 ```
 
 The installer verifies `SHA256SUMS`, installs to `~/.local/bin` by default, and
@@ -243,16 +243,19 @@ sandboxer run opencode-ei
 ```
 
 **Expected:** `config explain` lists the rule and sources, and the run gets the
-local port and read-only folder. Tracked `.sandboxer/overrides.d/` rules require
-`--trust-project-config` for additive rules; deny rules still apply with a
-warning.
+local port and read-only folder. Selectors are case-sensitive; workspace
+selectors match the full path, so use `**/name*` for basename matching. Confirm a
+rule with `config explain --app opencode`. Tracked `.sandboxer/overrides.d/`
+rules require `--trust-project-config` for additive rules; deny rules still
+apply with a warning.
 
 **What I need:** I want to silence audit noise and hide a workspace secret from
 the app without changing global config.
 
 **How sandboxer delivers:** `audit.ignore` filters wizard evidence while leaving
 raw JSONL intact. `visibility.ignore` masks matching workspace paths inside the
-sandbox; masks are workspace-only and currently require `rw`/`ro` mode.
+sandbox in `rw`, `ro`, and overlay modes. Overlay masks cover nested lower and
+upper-only entries, and an incomplete mask walk fails closed.
 
 **Try it:**
 
@@ -327,7 +330,7 @@ to the selected devices and weakens isolation.
 ```sh
 sandboxer upgrade --check
 sandboxer upgrade
-sandboxer upgrade --version v0.2.2
+sandboxer upgrade --version v0.2.3
 ```
 
 Follow development prereleases with:
