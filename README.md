@@ -46,7 +46,7 @@ Pin a tag:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/PolasekT/sandboxer-releases/master/install.sh |
-  SANDBOXER_VERSION=v0.2.3 bash
+  SANDBOXER_VERSION=v0.2.4 bash
 ```
 
 The installer verifies `SHA256SUMS`, installs to `~/.local/bin` by default, and
@@ -144,6 +144,7 @@ The run continues under the supervisor after the terminal closes.
 ```sh
 # Reach one host TCP/UDP service through a run-private relay.
 sandboxer run opencode --host-service 127.0.0.1:5432
+sandboxer run opencode --host-service 127.0.0.1:5432 -- curl localhost:5432
 sandboxer run opencode --host-port udp:127.0.0.1:5353
 
 # Publish a guest loopback port on host loopback.
@@ -152,7 +153,9 @@ sandboxer run --publish 127.0.0.1:0:3000 -- npm run dev
 ```
 
 Loopback publishes are visible to other local users. External binds require
-`--publish-external` and explicit review.
+`--publish-external` and explicit review. Inline TCP host services also expose
+the same guest loopback port when it is at least 1024; named TCP services can
+opt in with `guest_port = PORT`.
 
 ### Mount a host path
 
@@ -330,7 +333,7 @@ to the selected devices and weakens isolation.
 ```sh
 sandboxer upgrade --check
 sandboxer upgrade
-sandboxer upgrade --version v0.2.3
+sandboxer upgrade --version v0.2.4
 ```
 
 Follow development prereleases with:
