@@ -103,6 +103,61 @@ sandboxer patch apply <patch-id> --check
 sandboxer patch apply <patch-id>
 ```
 
+### Explain, approve, and review a run
+
+Inspect the effective plan before starting an app:
+
+```sh
+sandboxer plan explain --app opencode
+sandboxer plan explain --app opencode --json
+```
+
+Prototype an exact run command, including its full flag surface and passthrough
+arguments:
+
+```sh
+sandboxer run --explain opencode --net all -- --model fast
+sandboxer run --explain --explain-json opencode --net all
+```
+
+Turn explicit denial evidence into review-only policy suggestions, then validate
+a proposed fragment before applying it:
+
+```sh
+sandboxer policy suggest --last
+sandboxer policy suggest --last --exact
+sandboxer policy check ./proposal.toml --app opencode
+```
+
+Generate a redacted report of what a run attempted and changed:
+
+```sh
+sandboxer report --last
+sandboxer report --last --format json
+sandboxer report --last --format html --output ./report.html
+```
+
+Reports never include request bodies, headers, credentials, environment values,
+or file contents; missing evidence is marked explicitly.
+
+### Named persistent volumes
+
+Keep writable caches under sandboxer-owned state instead of mounting broad host
+cache directories:
+
+```sh
+sandboxer run --volume cache:/home/me/.cache/npm opencode
+sandboxer run --volume build:/build:ro opencode
+sandboxer run --volume-user shared:/srv/shared opencode
+sandboxer volume list
+sandboxer volume show cache
+sandboxer volume prune --dry-run
+```
+
+Project scope is the default; `--volume-user` is explicit user scope. Volumes
+are visible in plans, reports, status, and the generated AGENTS manifest. Quotas
+are preflight/accounting checks rather than hard write-time quotas.
+
 ### Network modes
 
 ```sh
